@@ -24,5 +24,7 @@
 - (NSArray<NSDictionary *> *)getAvailableRearCameras;
 - (void)switchToDevice:(AVCaptureDevice *)newDevice;
 - (void)setVideoOutputOrientation:(AVCaptureVideoOrientation)orientation;
+- (void)setTargetFPS:(int)fps;
+- (int)targetFPS;
 
 @end

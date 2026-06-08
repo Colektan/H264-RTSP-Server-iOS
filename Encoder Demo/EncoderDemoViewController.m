@@ -19,6 +19,7 @@
     [super viewDidLoad];
     [self startPreview];
     [self setupCameraDropdown];
+    [self setupFpsDropdown];
 }
 
 - (void)viewDidLayoutSubviews {
@@ -45,6 +46,13 @@
         CGFloat topPadding = safeArea.top > 0 ? safeArea.top : 20;
         CGFloat leftPadding = safeArea.left > 0 ? safeArea.left : 20;
         self.cameraMenuButton.frame = CGRectMake(leftPadding, topPadding + 10, 150, 36);
+    }
+    
+    // Layout the frame rate menu button at top-right
+    if (self.fpsMenuButton) {
+        CGFloat topPadding = safeArea.top > 0 ? safeArea.top : 20;
+        CGFloat rightPadding = safeArea.right > 0 ? safeArea.right : 20;
+        self.fpsMenuButton.frame = CGRectMake(size.width - rightPadding - 150, topPadding + 10, 150, 36);
     }
     
     // 4. Layout the server address label at bottom-center
@@ -187,9 +195,45 @@
     [self presentViewController:alert animated:YES completion:nil];
 }
 
-- (void)didReceiveMemoryWarning
-{
-    [super didReceiveMemoryWarning];
-    // Dispose of any resources that can be recreated.
+- (void)setupFpsDropdown {
+    UIButton *menuButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    int currentFps = [[CameraServer server] targetFPS];
+    [menuButton setTitle:[NSString stringWithFormat:@"帧率: %d FPS ▾", currentFps] forState:UIControlStateNormal];
+    menuButton.titleLabel.font = [UIFont boldSystemFontOfSize:15];
+    menuButton.backgroundColor = [UIColor colorWithRed:0 green:0 blue:0 alpha:0.6];
+    [menuButton setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
+    menuButton.layer.cornerRadius = 8;
+    menuButton.clipsToBounds = YES;
+    
+    [menuButton addTarget:self action:@selector(showFpsPicker:) forControlEvents:UIControlEventTouchUpInside];
+    [self.view addSubview:menuButton];
+    self.fpsMenuButton = menuButton;
 }
+
+- (void)showFpsPicker:(UIButton *)sender {
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"选择目标帧率" message:nil preferredStyle:UIAlertControllerStyleActionSheet];
+    
+    NSArray *fpsOptions = @[@15, @24, @30];
+    for (NSNumber *fpsNum in fpsOptions) {
+        int fps = [fpsNum intValue];
+        NSString *title = [NSString stringWithFormat:@"%d FPS", fps];
+        
+        UIAlertAction *action = [UIAlertAction actionWithTitle:title style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action) {
+            [[CameraServer server] setTargetFPS:fps];
+            [sender setTitle:[NSString stringWithFormat:@"帧率: %d FPS ▾", fps] forState:UIControlStateNormal];
+            NSLog(@"[EncoderDemo] Changed target FPS to: %d", fps);
+        }];
+        [alert addAction:action];
+    }
+    
+    UIAlertAction *cancel = [UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil];
+    [alert addAction:cancel];
+    
+    // For iPad popover compatibility
+    alert.popoverPresentationController.sourceView = sender;
+    alert.popoverPresentationController.sourceRect = sender.bounds;
+    
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
 @end

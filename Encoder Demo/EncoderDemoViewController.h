@@ -12,6 +12,7 @@
 @property (strong, nonatomic) IBOutlet UIView *cameraView;
 @property (strong, nonatomic) IBOutlet UILabel *serverAddress;
 @property (strong, nonatomic) UIButton *cameraMenuButton;
+@property (strong, nonatomic) UIButton *fpsMenuButton;
 
 - (void) startPreview;
 

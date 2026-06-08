@@ -28,6 +28,7 @@ static CameraServer *theServer;
   int _tcpServerFd;
   NSMutableArray *_clientSockets;
   dispatch_queue_t _tcpServerQueue;
+  int _targetFPS;
 }
 @end
 
@@ -44,6 +45,7 @@ static CameraServer *theServer;
   self = [super init];
   if (self) {
     _tcpServerFd = -1;
+    _targetFPS = 30;
   }
   return self;
 }
@@ -87,16 +89,16 @@ static CameraServer *theServer;
     if ([dev lockForConfiguration:&frameRateError]) {
       CMTime frameDuration;
       frameDuration.value = 1;
-      frameDuration.timescale = 30;
+      frameDuration.timescale = _targetFPS;
       frameDuration.flags = kCMTimeFlags_Valid;
       frameDuration.epoch = 0;
       dev.activeVideoMinFrameDuration = frameDuration;
       dev.activeVideoMaxFrameDuration = frameDuration;
       [dev unlockForConfiguration];
-      NSLog(@"[CameraServer] Camera frame rate successfully locked to 30 FPS.");
+      NSLog(@"[CameraServer] Camera frame rate successfully locked to %d FPS.", _targetFPS);
     } else {
-      NSLog(@"[CameraServer] Failed to lock frame rate to 30 FPS: %@",
-            frameRateError.localizedDescription);
+      NSLog(@"[CameraServer] Failed to lock frame rate to %d FPS: %@",
+            _targetFPS, frameRateError.localizedDescription);
     }
     AVCaptureDeviceInput *input =
         [AVCaptureDeviceInput deviceInputWithDevice:dev error:nil];
@@ -309,19 +311,19 @@ static CameraServer *theServer;
   if (newInput && [_session canAddInput:newInput]) {
     [_session addInput:newInput];
 
-    // Re-lock framerate configuration at 30 FPS on the new device
+    // Re-lock framerate configuration at target FPS on the new device
     NSError *frameRateError = nil;
     if ([newDevice lockForConfiguration:&frameRateError]) {
       CMTime frameDuration;
       frameDuration.value = 1;
-      frameDuration.timescale = 30;
+      frameDuration.timescale = _targetFPS;
       frameDuration.flags = kCMTimeFlags_Valid;
       frameDuration.epoch = 0;
       newDevice.activeVideoMinFrameDuration = frameDuration;
       newDevice.activeVideoMaxFrameDuration = frameDuration;
       [newDevice unlockForConfiguration];
-      NSLog(@"[CameraServer] Camera frame rate successfully locked to 30 FPS "
-            @"on new device.");
+      NSLog(@"[CameraServer] Camera frame rate successfully locked to %d FPS "
+            @"on new device.", _targetFPS);
     } else {
       NSLog(@"[CameraServer] Failed to lock frame rate on new device: %@",
             frameRateError.localizedDescription);
@@ -427,6 +429,35 @@ static CameraServer *theServer;
       NSLog(@"[CameraServer] Removed %lu disconnected intrinsics clients.", (unsigned long)disconnected.count);
     }
   }
+}
+
+- (void)setTargetFPS:(int)fps {
+  _targetFPS = fps;
+  if (!_session) return;
+  
+  [_session beginConfiguration];
+  for (AVCaptureDeviceInput *input in [_session.inputs copy]) {
+    AVCaptureDevice *device = input.device;
+    NSError *error = nil;
+    if ([device lockForConfiguration:&error]) {
+      CMTime frameDuration;
+      frameDuration.value = 1;
+      frameDuration.timescale = fps;
+      frameDuration.flags = kCMTimeFlags_Valid;
+      frameDuration.epoch = 0;
+      device.activeVideoMinFrameDuration = frameDuration;
+      device.activeVideoMaxFrameDuration = frameDuration;
+      [device unlockForConfiguration];
+      NSLog(@"[CameraServer] Frame rate successfully locked to %d FPS for active device.", fps);
+    } else {
+      NSLog(@"[CameraServer] Failed to lock frame rate to %d FPS: %@", fps, error.localizedDescription);
+    }
+  }
+  [_session commitConfiguration];
+}
+
+- (int)targetFPS {
+  return _targetFPS;
 }
 
 @end
