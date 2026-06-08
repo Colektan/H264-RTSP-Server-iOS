@@ -362,6 +362,8 @@ static void onRTCP(CFSocketRef s,
         _recvRTCP = CFSocketCreate(nil, PF_INET, SOCK_DGRAM, IPPROTO_UDP, kCFSocketDataCallBack, onRTCP, &info);
         
         struct sockaddr_in addr;
+        memset(&addr, 0, sizeof(addr));
+        addr.sin_len = sizeof(addr);
         addr.sin_addr.s_addr = INADDR_ANY;
         addr.sin_family = AF_INET;
         addr.sin_port = htons(6971);
@@ -396,6 +398,14 @@ static void onRTCP(CFSocketRef s,
         {
             return;
         }
+    }
+    
+    static int latencyLogCounter = 0;
+    latencyLogCounter++;
+    if (latencyLogCounter % 30 == 0) {
+        double current = [[NSProcessInfo processInfo] systemUptime];
+        double latencyMs = (current - pts) * 1000.0;
+        NSLog(@"[RTSP] Phone pipeline latency (capture -> send): %.2f ms", latencyMs);
     }
     
     const int rtp_header_size = 12;

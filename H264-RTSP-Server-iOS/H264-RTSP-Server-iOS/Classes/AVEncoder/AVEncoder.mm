@@ -146,11 +146,21 @@ static unsigned int to_host(unsigned char* p)
 
 - (BOOL) parseParams:(NSString*) path
 {
+    NSLog(@"[AVEncoder] parseParams: path = %@", path);
     NSFileHandle* file = [NSFileHandle fileHandleForReadingAtPath:path];
+    if (file == nil) {
+        NSLog(@"[AVEncoder] parseParams FAILED: file is nil");
+        return NO;
+    }
     struct stat s;
     fstat([file fileDescriptor], &s);
+    NSLog(@"[AVEncoder] parseParams: file size = %lld bytes", s.st_size);
     MP4Atom* movie = [MP4Atom atomAt:0 size:(int)s.st_size type:(OSType)('file') inFile:file];
     MP4Atom* moov = [movie childOfType:(OSType)('moov') startAt:0];
+    if (moov == nil) {
+        NSLog(@"[AVEncoder] parseParams FAILED: 'moov' atom not found");
+        return NO;
+    }
     MP4Atom* trak = nil;
     if (moov != nil)
     {
@@ -178,45 +188,62 @@ static unsigned int to_host(unsigned char* p)
             }
         }
     }
+    if (trak == nil) {
+        NSLog(@"[AVEncoder] parseParams FAILED: 'trak' atom not found");
+        return NO;
+    }
     MP4Atom* stsd = nil;
     if (trak != nil)
     {
         MP4Atom* media = [trak childOfType:(OSType)('mdia') startAt:0];
-        if (media != nil)
-        {
-            MP4Atom* minf = [media childOfType:(OSType)('minf') startAt:0];
-            if (minf != nil)
-            {
-                MP4Atom* stbl = [minf childOfType:(OSType)('stbl') startAt:0];
-                if (stbl != nil)
-                {
-                    stsd = [stbl childOfType:(OSType)('stsd') startAt:0];
-                }
-            }
+        if (media == nil) {
+            NSLog(@"[AVEncoder] parseParams FAILED: 'mdia' atom not found");
+            return NO;
         }
+        MP4Atom* minf = [media childOfType:(OSType)('minf') startAt:0];
+        if (minf == nil) {
+            NSLog(@"[AVEncoder] parseParams FAILED: 'minf' atom not found");
+            return NO;
+        }
+        MP4Atom* stbl = [minf childOfType:(OSType)('stbl') startAt:0];
+        if (stbl == nil) {
+            NSLog(@"[AVEncoder] parseParams FAILED: 'stbl' atom not found");
+            return NO;
+        }
+        stsd = [stbl childOfType:(OSType)('stsd') startAt:0];
+    }
+    if (stsd == nil)
+    {
+        NSLog(@"[AVEncoder] parseParams FAILED: 'stsd' atom not found");
+        return NO;
     }
     if (stsd != nil)
     {
         MP4Atom* avc1 = [stsd childOfType:(OSType)('avc1') startAt:8];
-        if (avc1 != nil)
+        if (avc1 == nil) {
+            NSLog(@"[AVEncoder] parseParams FAILED: 'avc1' atom not found");
+            return NO;
+        }
+        MP4Atom* esd = [avc1 childOfType:(OSType)('avcC') startAt:78];
+        if (esd == nil) {
+            NSLog(@"[AVEncoder] parseParams FAILED: 'avcC' atom not found");
+            return NO;
+        }
+        // this is the avcC record that we are looking for
+        _avcC = [esd readAt:0 size:(int)esd.length];
+        if (_avcC != nil)
         {
-            MP4Atom* esd = [avc1 childOfType:(OSType)('avcC') startAt:78];
-            if (esd != nil)
-            {
-                // this is the avcC record that we are looking for
-                _avcC = [esd readAt:0 size:(int)esd.length];
-                if (_avcC != nil)
-                {
-                    // extract size of length field
-                    unsigned char* p = (unsigned char*)[_avcC bytes];
-                    _lengthSize = (p[4] & 3) + 1;
-                    
-                    avcCHeader avc((const BYTE*)[_avcC bytes], (int)[_avcC length]);
-                    _pocState.SetHeader(&avc);
-                    
-                    return YES;
-                }
-            }
+            // extract size of length field
+            unsigned char* p = (unsigned char*)[_avcC bytes];
+            _lengthSize = (p[4] & 3) + 1;
+            
+            avcCHeader avc((const BYTE*)[_avcC bytes], (int)[_avcC length]);
+            _pocState.SetHeader(&avc);
+            
+            NSLog(@"[AVEncoder] parseParams SUCCESS! Length size = %d", _lengthSize);
+            return YES;
+        } else {
+            NSLog(@"[AVEncoder] parseParams FAILED: _avcC read is nil");
         }
     }
     return NO;
@@ -227,6 +254,7 @@ static unsigned int to_host(unsigned char* p)
     // the initial one-frame-only file has been completed
     // Extract the avcC structure and then start monitoring the
     // main file to extract video from the mdat chunk.
+    NSLog(@"[AVEncoder] onParamsCompletion called. File path = %@", _headerWriter.path);
     if ([self parseParams:_headerWriter.path])
     {
         if (_paramsBlock)
@@ -243,6 +271,8 @@ static unsigned int to_host(unsigned char* p)
             [self onFileUpdate];
         });
         dispatch_resume(_readSource);
+    } else {
+        NSLog(@"[AVEncoder] FAILED to parse params from initial file!");
     }
 }
 
@@ -257,11 +287,16 @@ static unsigned int to_host(unsigned char* p)
             // file (containing only one frame) is then finished, so we can extract the avcC record.
             // Only when we've got that do we start reading from the main file.
             _needParams = NO;
+            NSLog(@"[AVEncoder] Appending first frame to headerWriter to generate params...");
             if ([_headerWriter encodeFrame:sampleBuffer])
             {
+                NSLog(@"[AVEncoder] First frame appended successfully. Finishing headerWriter...");
                 [_headerWriter finishWithCompletionHandler:^{
                     [self onParamsCompletion];
                 }];
+            } else {
+                NSLog(@"[AVEncoder] FAILED to append first frame to headerWriter.");
+                _needParams = YES;
             }
         }
     }

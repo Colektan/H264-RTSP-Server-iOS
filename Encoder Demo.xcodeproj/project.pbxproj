@@ -19,6 +19,7 @@
 		841255C016A035E3001749D9 /* EncoderDemoViewController.m in Sources */ = {isa = PBXBuildFile; fileRef = 841255BF16A035E3001749D9 /* EncoderDemoViewController.m */; };
 		846119C716D3BF8D00468D98 /* CameraServer.m in Sources */ = {isa = PBXBuildFile; fileRef = 846119C616D3BF8D00468D98 /* CameraServer.m */; };
 		B5450FEF263AB91D00DF9D5A /* UIKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 841255A016A035E3001749D9 /* UIKit.framework */; };
+		841255C816A035F9001749DA /* CoreMedia.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 841255C816A035F9001749D9 /* CoreMedia.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -67,6 +68,7 @@
 			files = (
 				B5450FEF263AB91D00DF9D5A /* UIKit.framework in Frameworks */,
 				36F4CE118EE82895A8ED1BF8 /* Pods_Encoder_Demo.framework in Frameworks */,
+				841255C816A035F9001749DA /* CoreMedia.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -186,7 +188,7 @@
 				ORGANIZATIONNAME = "Geraint Davies";
 				TargetAttributes = {
 					8412559B16A035E3001749D9 = {
-						DevelopmentTeam = F7AP32ZTM5;
+						DevelopmentTeam = 7ZJ2Q45N3H;
 					};
 				};
 			};
@@ -197,6 +199,7 @@
 			knownRegions = (
 				English,
 				en,
+				Base,
 			);
 			mainGroup = 8412559116A035E3001749D9;
 			productRefGroup = 8412559D16A035E3001749D9 /* Products */;
@@ -381,12 +384,13 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = FF3021689F42810D1D1CE7AA /* Pods-Encoder Demo.debug.xcconfig */;
 			buildSettings = {
-				DEVELOPMENT_TEAM = F7AP32ZTM5;
+				DEVELOPMENT_TEAM = 7ZJ2Q45N3H;
 				GCC_PRECOMPILE_PREFIX_HEADER = YES;
 				GCC_PREFIX_HEADER = "Encoder Demo/Encoder Demo-Prefix.pch";
 				INFOPLIST_FILE = "Encoder Demo/Encoder Demo-Info.plist";
 				IPHONEOS_DEPLOYMENT_TARGET = 11.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				PRODUCT_BUNDLE_IDENTIFIER = com.co.rtsp.server;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				WRAPPER_EXTENSION = app;
 			};
@@ -396,12 +400,13 @@
 			isa = XCBuildConfiguration;
 			baseConfigurationReference = AA065CB90FDE101D966F32D2 /* Pods-Encoder Demo.release.xcconfig */;
 			buildSettings = {
-				DEVELOPMENT_TEAM = F7AP32ZTM5;
+				DEVELOPMENT_TEAM = 7ZJ2Q45N3H;
 				GCC_PRECOMPILE_PREFIX_HEADER = YES;
 				GCC_PREFIX_HEADER = "Encoder Demo/Encoder Demo-Prefix.pch";
 				INFOPLIST_FILE = "Encoder Demo/Encoder Demo-Info.plist";
 				IPHONEOS_DEPLOYMENT_TARGET = 11.0;
 				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				PRODUCT_BUNDLE_IDENTIFIER = com.co.rtsp.server;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				WRAPPER_EXTENSION = app;
 			};

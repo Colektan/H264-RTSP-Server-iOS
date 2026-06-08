@@ -79,9 +79,11 @@ static void onSocket (
     setsockopt(CFSocketGetNative(_listener), SOL_SOCKET, SO_REUSEADDR, &t, sizeof(t));
     
     struct sockaddr_in addr;
+    memset(&addr, 0, sizeof(addr));
+    addr.sin_len = sizeof(addr);
     addr.sin_addr.s_addr = INADDR_ANY;
     addr.sin_family = AF_INET;
-    addr.sin_port = htons(554);
+    addr.sin_port = htons(8554);
     CFDataRef dataAddr = CFDataCreate(nil, (const uint8_t*)&addr, sizeof(addr));
     CFSocketError e = CFSocketSetAddress(_listener, dataAddr);
     CFRelease(dataAddr);
@@ -89,6 +91,9 @@ static void onSocket (
     if (e)
     {
         NSLog(@"bind error %d", (int) e);
+        CFSocketInvalidate(_listener);
+        _listener = nil;
+        return nil;
     }
     
     CFRunLoopSourceRef rls = CFSocketCreateRunLoopSource(nil, _listener, 0);
@@ -156,25 +161,42 @@ static void onSocket (
 
 + (NSString*) getIPAddress
 {
-    NSString* address;
-    struct ifaddrs *interfaces = nil;
+    NSString* wifiAddress = nil;
+    NSString* hotspotAddress = nil;
+    NSString* fallbackAddress = nil;
     
-    // get all our interfaces and find the one that corresponds to wifi
+    struct ifaddrs *interfaces = nil;
     if (!getifaddrs(&interfaces))
     {
         for (struct ifaddrs* addr = interfaces; addr != NULL; addr = addr->ifa_next)
         {
-            if (([[NSString stringWithUTF8String:addr->ifa_name] isEqualToString:@"en0"]) &&
-                (addr->ifa_addr->sa_family == AF_INET))
-            {
-                struct sockaddr_in* sa = (struct sockaddr_in*) addr->ifa_addr;
-                address = [NSString stringWithUTF8String:inet_ntoa(sa->sin_addr)];
-                break;
+            if (addr->ifa_addr == NULL || addr->ifa_addr->sa_family != AF_INET) {
+                continue;
+            }
+            
+            NSString* name = [NSString stringWithUTF8String:addr->ifa_name];
+            struct sockaddr_in* sa = (struct sockaddr_in*) addr->ifa_addr;
+            NSString* ip = [NSString stringWithUTF8String:inet_ntoa(sa->sin_addr)];
+            
+            // Ignore loopback
+            if ([ip isEqualToString:@"127.0.0.1"]) {
+                continue;
+            }
+            
+            if ([name isEqualToString:@"en0"]) {
+                wifiAddress = ip;
+            } else if ([name containsString:@"bridge"] || [name containsString:@"ap"]) {
+                hotspotAddress = ip;
+            } else if (![name containsString:@"lo"] && ![name containsString:@"pdp"]) {
+                fallbackAddress = ip;
             }
         }
     }
     freeifaddrs(interfaces);
-    return address;
+    
+    if (wifiAddress) return wifiAddress;
+    if (hotspotAddress) return hotspotAddress;
+    return fallbackAddress;
 }
 
 @end

@@ -21,5 +21,8 @@
 - (void) shutdown;
 - (NSString*) getURL;
 - (AVCaptureVideoPreviewLayer*) getPreviewLayer;
+- (NSArray<NSDictionary *> *)getAvailableRearCameras;
+- (void)switchToDevice:(AVCaptureDevice *)newDevice;
+- (void)setVideoOutputOrientation:(AVCaptureVideoOrientation)orientation;
 
 @end
