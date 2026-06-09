@@ -10,6 +10,7 @@
 #import "RTSPMessage.h"
 #import "NALUnit.h"
 #import "arpa/inet.h"
+#import <sys/socket.h>
 
 void tonet_short(uint8_t* p, unsigned short s)
 {
@@ -355,21 +356,60 @@ static void onRTCP(CFSocketRef s,
         _sRTCP = CFSocketCreate(nil, PF_INET, SOCK_DGRAM, IPPROTO_UDP, 0, nil, nil);
         CFRelease(data);
         
+        int yes = 1;
+        if (_sRTP) {
+            int fd = CFSocketGetNative(_sRTP);
+            setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
+            setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &yes, sizeof(yes));
+            
+            struct sockaddr_in addrRTP;
+            memset(&addrRTP, 0, sizeof(addrRTP));
+            addrRTP.sin_len = sizeof(addrRTP);
+            addrRTP.sin_family = AF_INET;
+            addrRTP.sin_addr.s_addr = INADDR_ANY;
+            addrRTP.sin_port = htons(6970);
+            CFDataRef dataAddrRTP = CFDataCreate(nil, (const uint8_t*)&addrRTP, sizeof(addrRTP));
+            CFSocketSetAddress(_sRTP, dataAddrRTP);
+            CFRelease(dataAddrRTP);
+        }
+        
+        if (_sRTCP) {
+            int fd = CFSocketGetNative(_sRTCP);
+            setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
+            setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &yes, sizeof(yes));
+            
+            struct sockaddr_in addrRTCP;
+            memset(&addrRTCP, 0, sizeof(addrRTCP));
+            addrRTCP.sin_len = sizeof(addrRTCP);
+            addrRTCP.sin_family = AF_INET;
+            addrRTCP.sin_addr.s_addr = INADDR_ANY;
+            addrRTCP.sin_port = htons(6971);
+            CFDataRef dataAddrRTCP = CFDataCreate(nil, (const uint8_t*)&addrRTCP, sizeof(addrRTCP));
+            CFSocketSetAddress(_sRTCP, dataAddrRTCP);
+            CFRelease(dataAddrRTCP);
+        }
+        
         // reader reports received here
         CFSocketContext info;
         memset(&info, 0, sizeof(info));
         info.info = (void*)CFBridgingRetain(self);
         _recvRTCP = CFSocketCreate(nil, PF_INET, SOCK_DGRAM, IPPROTO_UDP, kCFSocketDataCallBack, onRTCP, &info);
         
-        struct sockaddr_in addr;
-        memset(&addr, 0, sizeof(addr));
-        addr.sin_len = sizeof(addr);
-        addr.sin_addr.s_addr = INADDR_ANY;
-        addr.sin_family = AF_INET;
-        addr.sin_port = htons(6971);
-        CFDataRef dataAddr = CFDataCreate(nil, (const uint8_t*)&addr, sizeof(addr));
-        CFSocketSetAddress(_recvRTCP, dataAddr);
-        CFRelease(dataAddr);
+        if (_recvRTCP) {
+            int fd = CFSocketGetNative(_recvRTCP);
+            setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
+            setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &yes, sizeof(yes));
+            
+            struct sockaddr_in addr;
+            memset(&addr, 0, sizeof(addr));
+            addr.sin_len = sizeof(addr);
+            addr.sin_addr.s_addr = INADDR_ANY;
+            addr.sin_family = AF_INET;
+            addr.sin_port = htons(6971);
+            CFDataRef dataAddr = CFDataCreate(nil, (const uint8_t*)&addr, sizeof(addr));
+            CFSocketSetAddress(_recvRTCP, dataAddr);
+            CFRelease(dataAddr);
+        }
         
         _rlsRTCP = CFSocketCreateRunLoopSource(nil, _recvRTCP, 0);
         CFRunLoopAddSource(CFRunLoopGetMain(), _rlsRTCP, kCFRunLoopCommonModes);
