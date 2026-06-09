@@ -9,5 +9,5 @@ Pod::Spec.new do |spec|
   spec.platform     = :ios, "9.0"
   spec.source       = { :git => "https://github.com/irons163/H264-RTSP-Server-iOS.git", :tag => spec.version.to_s }
   spec.source_files  = "H264-RTSP-Server-iOS/Classes/**/*.{h,m,mm,cpp,xib}"
-  spec.frameworks = "AVFoundation", "CoreVideo"
+  spec.frameworks = "AVFoundation", "CoreVideo", "CoreMedia", "VideoToolbox"
 end

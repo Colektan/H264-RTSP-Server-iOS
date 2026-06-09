@@ -22,6 +22,8 @@
 		B5450FC8263AB32600DF9D5A /* RTSPServer.h in Headers */ = {isa = PBXBuildFile; fileRef = B5450FC2263AB32600DF9D5A /* RTSPServer.h */; settings = {ATTRIBUTES = (Public, ); }; };
 		B5450FC9263AB32600DF9D5A /* RTSPClientConnection.mm in Sources */ = {isa = PBXBuildFile; fileRef = B5450FC3263AB32600DF9D5A /* RTSPClientConnection.mm */; };
 		B5450FCA263AB32600DF9D5A /* RTSPMessage.m in Sources */ = {isa = PBXBuildFile; fileRef = B5450FC4263AB32600DF9D5A /* RTSPMessage.m */; };
+		B5450FD9263AB39D00DF9D5A /* CoreMedia.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B5450F14263AB19D00DF9D5E /* CoreMedia.framework */; };
+		B5450FDA263AB39D00DF9D5A /* VideoToolbox.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = B5450F14263AB19D00DF9D5F /* VideoToolbox.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -42,6 +44,8 @@
 		B5450FC2263AB32600DF9D5A /* RTSPServer.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = RTSPServer.h; sourceTree = "<group>"; };
 		B5450FC3263AB32600DF9D5A /* RTSPClientConnection.mm */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.cpp.objcpp; path = RTSPClientConnection.mm; sourceTree = "<group>"; };
 		B5450FC4263AB32600DF9D5A /* RTSPMessage.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = RTSPMessage.m; sourceTree = "<group>"; };
+		B5450F14263AB19D00DF9D5E /* CoreMedia.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreMedia.framework; path = System/Library/Frameworks/CoreMedia.framework; sourceTree = SDKROOT; };
+		B5450F14263AB19D00DF9D5F /* VideoToolbox.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = VideoToolbox.framework; path = System/Library/Frameworks/VideoToolbox.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -49,6 +53,8 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B5450FD9263AB39D00DF9D5A /* CoreMedia.framework in Frameworks */,
+				B5450FDA263AB39D00DF9D5A /* VideoToolbox.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -60,6 +66,8 @@
 			children = (
 				B5450F13263AB19D00DF9D5A /* H264-RTSP-Server-iOS */,
 				B5450F12263AB19D00DF9D5A /* Products */,
+				B5450F14263AB19D00DF9D5E /* CoreMedia.framework */,
+				B5450F14263AB19D00DF9D5F /* VideoToolbox.framework */,
 			);
 			sourceTree = "<group>";
 		};

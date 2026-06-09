@@ -20,6 +20,7 @@
 		846119C716D3BF8D00468D98 /* CameraServer.m in Sources */ = {isa = PBXBuildFile; fileRef = 846119C616D3BF8D00468D98 /* CameraServer.m */; };
 		B5450FEF263AB91D00DF9D5A /* UIKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 841255A016A035E3001749D9 /* UIKit.framework */; };
 		841255C816A035F9001749DA /* CoreMedia.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 841255C816A035F9001749D9 /* CoreMedia.framework */; };
+		841255C816A035F9001749E1 /* VideoToolbox.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 841255C816A035F9001749E0 /* VideoToolbox.framework */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -53,6 +54,7 @@
 		841255C616A035F1001749D9 /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = System/Library/Frameworks/AVFoundation.framework; sourceTree = SDKROOT; };
 		841255C816A035F9001749D9 /* CoreMedia.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreMedia.framework; path = System/Library/Frameworks/CoreMedia.framework; sourceTree = SDKROOT; };
 		841255CA16A09114001749D9 /* CoreVideo.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreVideo.framework; path = System/Library/Frameworks/CoreVideo.framework; sourceTree = SDKROOT; };
+		841255C816A035F9001749E0 /* VideoToolbox.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = VideoToolbox.framework; path = System/Library/Frameworks/VideoToolbox.framework; sourceTree = SDKROOT; };
 		846119C516D3BF8D00468D98 /* CameraServer.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = CameraServer.h; sourceTree = "<group>"; };
 		846119C616D3BF8D00468D98 /* CameraServer.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = CameraServer.m; sourceTree = "<group>"; };
 		AA065CB90FDE101D966F32D2 /* Pods-Encoder Demo.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Encoder Demo.release.xcconfig"; path = "Target Support Files/Pods-Encoder Demo/Pods-Encoder Demo.release.xcconfig"; sourceTree = "<group>"; };
@@ -69,6 +71,7 @@
 				B5450FEF263AB91D00DF9D5A /* UIKit.framework in Frameworks */,
 				36F4CE118EE82895A8ED1BF8 /* Pods_Encoder_Demo.framework in Frameworks */,
 				841255C816A035F9001749DA /* CoreMedia.framework in Frameworks */,
+				841255C816A035F9001749E1 /* VideoToolbox.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -83,6 +86,7 @@
 				841255CA16A09114001749D9 /* CoreVideo.framework */,
 				841255C816A035F9001749D9 /* CoreMedia.framework */,
 				841255C616A035F1001749D9 /* AVFoundation.framework */,
+				841255C816A035F9001749E0 /* VideoToolbox.framework */,
 				8412559F16A035E3001749D9 /* Frameworks */,
 				8412559D16A035E3001749D9 /* Products */,
 				B10A05A7B45341B7475A721D /* Pods */,
@@ -104,6 +108,7 @@
 				841255A216A035E3001749D9 /* Foundation.framework */,
 				841255A416A035E3001749D9 /* CoreGraphics.framework */,
 				CAA6CAD210AD8662E10651A9 /* Pods_Encoder_Demo.framework */,
+				841255C816A035F9001749E0 /* VideoToolbox.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
