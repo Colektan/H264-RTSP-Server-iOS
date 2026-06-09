@@ -119,6 +119,10 @@ enum ServerState
     // reader reports
     CFSocketRef _recvRTCP;
     CFRunLoopSourceRef _rlsRTCP;
+    
+    BOOL _isTCP;
+    int _rtpChannel;
+    int _rtcpChannel;
 }
 
 - (RTSPClientConnection*) initWithSocket:(CFSocketNativeHandle) s Server:(RTSPServer*) server;
@@ -247,31 +251,68 @@ static void onRTCP(CFSocketRef s,
     {
         NSString* transport = [msg valueForOption:@"transport"];
         NSArray* props = [transport componentsSeparatedByString:@";"];
-        NSArray* ports = nil;
-        for (NSString* s in props)
+        
+        BOOL isTCP = [transport rangeOfString:@"RTP/AVP/TCP" options:NSCaseInsensitiveSearch].location != NSNotFound;
+        
+        if (isTCP)
         {
-            if ([s length] > 14)
+            NSArray* channels = nil;
+            for (NSString* s in props)
             {
-                if ([s compare:@"client_port=" options:0 range:NSMakeRange(0, 12)] == NSOrderedSame)
+                if ([s length] > 12)
                 {
-                    NSString* val = [s substringFromIndex:12];
-                    ports = [val componentsSeparatedByString:@"-"];
-                    break;
+                    if ([s compare:@"interleaved=" options:NSCaseInsensitiveSearch range:NSMakeRange(0, 12)] == NSOrderedSame)
+                    {
+                        NSString* val = [s substringFromIndex:12];
+                        channels = [val componentsSeparatedByString:@"-"];
+                        break;
+                    }
+                }
+            }
+            if ([channels count] == 2)
+            {
+                _isTCP = YES;
+                _rtpChannel = (int)[channels[0] integerValue];
+                _rtcpChannel = (int)[channels[1] integerValue];
+                
+                NSString* session_name = [self createSessionTCP];
+                if (session_name != nil)
+                {
+                    response = [msg createResponse:200 text:@"OK"];
+                    response = [response stringByAppendingFormat:@"Session: %@\r\nTransport: RTP/AVP/TCP;unicast;interleaved=%d-%d\r\n\r\n",
+                                session_name,
+                                _rtpChannel, _rtcpChannel];
                 }
             }
         }
-        if ([ports count] == 2)
+        else
         {
-            int portRTP = (int)[ports[0] integerValue];
-            int portRTCP = (int) [ports[1] integerValue];
-            
-            NSString* session_name = [self createSession:portRTP rtcp:portRTCP];
-            if (session_name != nil)
+            NSArray* ports = nil;
+            for (NSString* s in props)
             {
-                response = [msg createResponse:200 text:@"OK"];
-                response = [response stringByAppendingFormat:@"Session: %@\r\nTransport: RTP/AVP;unicast;client_port=%d-%d;server_port=6970-6971\r\n\r\n",
-                            session_name,
-                            portRTP,portRTCP];
+                if ([s length] > 14)
+                {
+                    if ([s compare:@"client_port=" options:0 range:NSMakeRange(0, 12)] == NSOrderedSame)
+                    {
+                        NSString* val = [s substringFromIndex:12];
+                        ports = [val componentsSeparatedByString:@"-"];
+                        break;
+                    }
+                }
+            }
+            if ([ports count] == 2)
+            {
+                int portRTP = (int)[ports[0] integerValue];
+                int portRTCP = (int) [ports[1] integerValue];
+                
+                NSString* session_name = [self createSession:portRTP rtcp:portRTCP];
+                if (session_name != nil)
+                {
+                    response = [msg createResponse:200 text:@"OK"];
+                    response = [response stringByAppendingFormat:@"Session: %@\r\nTransport: RTP/AVP;unicast;client_port=%d-%d;server_port=6970-6971\r\n\r\n",
+                                session_name,
+                                portRTP,portRTCP];
+                }
             }
         }
         if (response == nil)
@@ -351,6 +392,28 @@ static void onRTCP(CFSocketRef s,
     sdp = [sdp stringByAppendingFormat:@"a=rtpmap:96 H264/90000\r\na=mimetype:string;\"video/H264\"\r\na=framesize:96 %d-%d\r\na=Width:integer;%d\r\na=Height:integer;%d\r\n", cx, cy, cx, cy];
     sdp = [sdp stringByAppendingFormat:@"a=fmtp:96 packetization-mode=1;profile-level-id=%@;sprop-parameter-sets=%@,%@\r\n", profile_level_id, sps, pps];
     return sdp;
+}
+
+- (NSString*) createSessionTCP
+{
+    @synchronized(self)
+    {
+        // flag that setup is valid
+        long sessionid = random();
+        _session = [NSString stringWithFormat:@"%ld", sessionid];
+        _state = Setup;
+        _ssrc = random();
+        _packets = 0;
+        _bytesSent = 0;
+        _rtpBase = 0;
+    
+        _sentRTCP = nil;
+        _packetsReported = 0;
+        _bytesReported = 0;
+        
+        NSLog(@"[RTSP Setup] TCP Interleaved session initialized. Session: %@", _session);
+    }
+    return _session;
 }
 
 - (NSString*) createSession:(int) portRTP rtcp:(int) portRTCP
@@ -584,18 +647,40 @@ static void onRTCP(CFSocketRef s,
 {
     @synchronized(self)
     {
-        if (_sRTP)
+        if (_isTCP)
         {
-            CFDataRef data = CFDataCreate(nil, packet, cBytes);
-            CFSocketError err = CFSocketSendData(_sRTP, _addrRTP, data, 0);
-            CFRelease(data);
-            
-            static int rtpSendCount = 0;
-            rtpSendCount++;
-            if (rtpSendCount % 100 == 0 || err != kCFSocketSuccess) {
-                struct sockaddr_in* destAddr = (struct sockaddr_in*) CFDataGetBytePtr(_addrRTP);
-                NSLog(@"[RTSP UDP Send] RTP packet #%d, size: %d bytes, target: %s:%d, send result: %ld",
-                      rtpSendCount, cBytes, inet_ntoa(destAddr->sin_addr), ntohs(destAddr->sin_port), (long)err);
+            if (_s)
+            {
+                uint8_t header[4];
+                header[0] = '$';
+                header[1] = (uint8_t)_rtpChannel;
+                header[2] = (cBytes >> 8) & 0xff;
+                header[3] = cBytes & 0xff;
+                
+                CFDataRef dataHeader = CFDataCreate(nil, header, 4);
+                CFSocketSendData(_s, NULL, dataHeader, 0);
+                CFRelease(dataHeader);
+                
+                CFDataRef dataPayload = CFDataCreate(nil, packet, cBytes);
+                CFSocketSendData(_s, NULL, dataPayload, 0);
+                CFRelease(dataPayload);
+            }
+        }
+        else
+        {
+            if (_sRTP)
+            {
+                CFDataRef data = CFDataCreate(nil, packet, cBytes);
+                CFSocketError err = CFSocketSendData(_sRTP, _addrRTP, data, 0);
+                CFRelease(data);
+                
+                static int rtpSendCount = 0;
+                rtpSendCount++;
+                if (rtpSendCount % 100 == 0 || err != kCFSocketSuccess) {
+                    struct sockaddr_in* destAddr = (struct sockaddr_in*) CFDataGetBytePtr(_addrRTP);
+                    NSLog(@"[RTSP UDP Send] RTP packet #%d, size: %d bytes, target: %s:%d, send result: %ld",
+                          rtpSendCount, cBytes, inet_ntoa(destAddr->sin_addr), ntohs(destAddr->sin_port), (long)err);
+                }
             }
         }
         _packets++;
@@ -616,19 +701,42 @@ static void onRTCP(CFSocketRef s,
             tonet_long(buf+20, (_packets - _packetsReported));
             tonet_long(buf+24, (_bytesSent - _bytesReported));
             int lenRTCP = 28;
-            if (_sRTCP)
+            
+            if (_isTCP)
             {
-                CFDataRef dataRTCP = CFDataCreate(nil, buf, lenRTCP);
-                CFSocketError err = CFSocketSendData(_sRTCP, _addrRTCP, dataRTCP, lenRTCP);
-                CFRelease(dataRTCP);
-                if (err != kCFSocketSuccess) {
-                    struct sockaddr_in* destAddr = (struct sockaddr_in*) CFDataGetBytePtr(_addrRTCP);
-                    NSLog(@"[RTSP UDP Send] ERROR: Failed to send RTCP SR packet, size: %d bytes, target: %s:%d, result: %ld",
-                          lenRTCP, inet_ntoa(destAddr->sin_addr), ntohs(destAddr->sin_port), (long)err);
-                } else {
-                    struct sockaddr_in* destAddr = (struct sockaddr_in*) CFDataGetBytePtr(_addrRTCP);
-                    NSLog(@"[RTSP UDP Send] Sent RTCP Sender Report, size: %d bytes, target: %s:%d, result: %ld",
-                          lenRTCP, inet_ntoa(destAddr->sin_addr), ntohs(destAddr->sin_port), (long)err);
+                if (_s)
+                {
+                    uint8_t header[4];
+                    header[0] = '$';
+                    header[1] = (uint8_t)_rtcpChannel;
+                    header[2] = (lenRTCP >> 8) & 0xff;
+                    header[3] = lenRTCP & 0xff;
+                    
+                    CFDataRef dataHeader = CFDataCreate(nil, header, 4);
+                    CFSocketSendData(_s, NULL, dataHeader, 0);
+                    CFRelease(dataHeader);
+                    
+                    CFDataRef dataPayload = CFDataCreate(nil, buf, lenRTCP);
+                    CFSocketSendData(_s, NULL, dataPayload, 0);
+                    CFRelease(dataPayload);
+                }
+            }
+            else
+            {
+                if (_sRTCP)
+                {
+                    CFDataRef dataRTCP = CFDataCreate(nil, buf, lenRTCP);
+                    CFSocketError err = CFSocketSendData(_sRTCP, _addrRTCP, dataRTCP, lenRTCP);
+                    CFRelease(dataRTCP);
+                    if (err != kCFSocketSuccess) {
+                        struct sockaddr_in* destAddr = (struct sockaddr_in*) CFDataGetBytePtr(_addrRTCP);
+                        NSLog(@"[RTSP UDP Send] ERROR: Failed to send RTCP SR packet, size: %d bytes, target: %s:%d, result: %ld",
+                              lenRTCP, inet_ntoa(destAddr->sin_addr), ntohs(destAddr->sin_port), (long)err);
+                    } else {
+                        struct sockaddr_in* destAddr = (struct sockaddr_in*) CFDataGetBytePtr(_addrRTCP);
+                        NSLog(@"[RTSP UDP Send] Sent RTCP Sender Report, size: %d bytes, target: %s:%d, result: %ld",
+                              lenRTCP, inet_ntoa(destAddr->sin_addr), ntohs(destAddr->sin_port), (long)err);
+                    }
                 }
             }
             
@@ -664,6 +772,9 @@ static void onRTCP(CFSocketRef s,
             _recvRTCP = nil;
         }
         _session = nil;
+        _isTCP = NO;
+        _rtpChannel = 0;
+        _rtcpChannel = 0;
     }
 }
 
