@@ -83,6 +83,12 @@ static CameraServer *theServer;
 
     // create capture device with video input
     _session = [[AVCaptureSession alloc] init];
+    if ([_session canSetSessionPreset:AVCaptureSessionPreset1920x1080]) {
+      _session.sessionPreset = AVCaptureSessionPreset1920x1080;
+      NSLog(@"[CameraServer] Camera session preset successfully set to 1920x1080.");
+    } else {
+      NSLog(@"[CameraServer] Camera session does not support 1920x1080 preset.");
+    }
     AVCaptureDevice *dev =
         [AVCaptureDevice defaultDeviceWithMediaType:AVMediaTypeVideo];
     NSError *frameRateError = nil;
@@ -128,8 +134,53 @@ static CameraServer *theServer;
       }
     }
 
-    // create an encoder
-    _encoder = [AVEncoder encoderForHeight:480 andWidth:720];
+    // start capture and a preview layer
+    [_session startRunning];
+
+    _preview = [AVCaptureVideoPreviewLayer layerWithSession:_session];
+    _preview.videoGravity = AVLayerVideoGravityResizeAspectFill;
+  }
+}
+
+- (void)captureOutput:(AVCaptureOutput *)captureOutput
+    didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer
+           fromConnection:(AVCaptureConnection *)connection {
+  
+  CVImageBufferRef imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer);
+  int w = 0, h = 0;
+  if (imageBuffer) {
+    w = (int)CVPixelBufferGetWidth(imageBuffer);
+    h = (int)CVPixelBufferGetHeight(imageBuffer);
+  }
+
+  if (@available(iOS 11.0, *)) {
+    CFDataRef intrinsicData = CMGetAttachment(sampleBuffer, kCMSampleBufferAttachmentKey_CameraIntrinsicMatrix, NULL);
+    if (intrinsicData) {
+      CFIndex len = CFDataGetLength(intrinsicData);
+      const float *matrix = (const float *)CFDataGetBytePtr(intrinsicData);
+      float fx = 0, fy = 0, cx = 0, cy = 0;
+      if (len >= 48) {
+        // SIMD 16-byte alignment per column (4 floats per column)
+        fx = matrix[0];
+        fy = matrix[5];
+        cx = matrix[8];
+        cy = matrix[9];
+      } else if (len >= 36) {
+        // Packed floats (3 floats per column)
+        fx = matrix[0];
+        fy = matrix[4];
+        cx = matrix[6];
+        cy = matrix[7];
+      }
+      
+      [self sendIntrinsicsToClientsFx:fx fy:fy cx:cx cy:cy width:w height:h];
+    }
+  }
+
+  // Pass frame to encoder, dynamically initializing if nil
+  if (_encoder == nil && w > 0 && h > 0) {
+    NSLog(@"[CameraServer] Creating encoder dynamically for native resolution: %dx%d", w, h);
+    _encoder = [AVEncoder encoderForHeight:h andWidth:w];
     [_encoder
         encodeWithBlock:^int(NSArray *data, double pts) {
           if (_rtsp != nil) {
@@ -180,48 +231,6 @@ static CameraServer *theServer;
           }
           return 0;
         }];
-
-    // start capture and a preview layer
-    [_session startRunning];
-
-    _preview = [AVCaptureVideoPreviewLayer layerWithSession:_session];
-    _preview.videoGravity = AVLayerVideoGravityResizeAspectFill;
-  }
-}
-
-- (void)captureOutput:(AVCaptureOutput *)captureOutput
-    didOutputSampleBuffer:(CMSampleBufferRef)sampleBuffer
-           fromConnection:(AVCaptureConnection *)connection {
-  
-  if (@available(iOS 11.0, *)) {
-    CFDataRef intrinsicData = CMGetAttachment(sampleBuffer, kCMSampleBufferAttachmentKey_CameraIntrinsicMatrix, NULL);
-    if (intrinsicData) {
-      CFIndex len = CFDataGetLength(intrinsicData);
-      const float *matrix = (const float *)CFDataGetBytePtr(intrinsicData);
-      float fx = 0, fy = 0, cx = 0, cy = 0;
-      if (len >= 48) {
-        // SIMD 16-byte alignment per column (4 floats per column)
-        fx = matrix[0];
-        fy = matrix[5];
-        cx = matrix[8];
-        cy = matrix[9];
-      } else if (len >= 36) {
-        // Packed floats (3 floats per column)
-        fx = matrix[0];
-        fy = matrix[4];
-        cx = matrix[6];
-        cy = matrix[7];
-      }
-      
-      CVImageBufferRef imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer);
-      int w = 0, h = 0;
-      if (imageBuffer) {
-        w = (int)CVPixelBufferGetWidth(imageBuffer);
-        h = (int)CVPixelBufferGetHeight(imageBuffer);
-      }
-      
-      [self sendIntrinsicsToClientsFx:fx fy:fy cx:cx cy:cy width:w height:h];
-    }
   }
 
   // pass frame to encoder
@@ -236,9 +245,11 @@ static CameraServer *theServer;
   }
   if (_rtsp) {
     [_rtsp shutdownServer];
+    _rtsp = nil;
   }
   if (_encoder) {
     [_encoder shutdown];
+    _encoder = nil;
   }
   if (_tcpServerFd >= 0) {
     int fd_to_close = _tcpServerFd;
