@@ -199,110 +199,123 @@ static void onRTCP(CFSocketRef s,
 
 - (void) onSocketData:(CFDataRef)data
 {
-    if (CFDataGetLength(data) == 0)
+    CFIndex len = CFDataGetLength(data);
+    if (len == 0)
     {
+        NSLog(@"[RTSP Conn] Socket closed by remote client (received 0 bytes).");
         [self tearDown];
         CFSocketInvalidate(_s);
         _s = nil;
         [_server shutdownConnection:self];
         return;
     }
+    
+    NSString* rawStr = [[NSString alloc] initWithData:(__bridge NSData*)data encoding:NSUTF8StringEncoding];
+    NSLog(@"[RTSP Conn] Received %ld bytes from client:\n%@", (long)len, rawStr);
+    
     RTSPMessage* msg = [RTSPMessage createWithData:data];
-    if (msg != nil)
+    if (msg == nil)
     {
-        NSString* response = nil;
-        NSString* cmd = msg.command;
-        if ([cmd caseInsensitiveCompare:@"options"] == NSOrderedSame)
+        NSLog(@"[RTSP Conn] ERROR: Failed to parse incoming RTSP message.");
+        return;
+    }
+    
+    NSString* response = nil;
+    NSString* cmd = msg.command;
+    NSLog(@"[RTSP Conn] Parsed command: %@", cmd);
+    
+    if ([cmd caseInsensitiveCompare:@"options"] == NSOrderedSame)
+    {
+        response = [msg createResponse:200 text:@"OK"];
+        response = [response stringByAppendingString:@"Server: AVEncoderDemo/1.0\r\n"];
+        response = [response stringByAppendingString:@"Public: DESCRIBE, SETUP, TEARDOWN, PLAY, OPTIONS\r\n\r\n"];
+    }
+    else if ([cmd caseInsensitiveCompare:@"describe"] == NSOrderedSame)
+    {
+        NSString* sdp = [self makeSDP];
+        response = [msg createResponse:200 text:@"OK"];
+        NSString* date = [NSDateFormatter localizedStringFromDate:[NSDate date] dateStyle:NSDateFormatterLongStyle timeStyle:NSDateFormatterLongStyle];
+        CFDataRef dlocaladdr = CFSocketCopyAddress(_s);
+        struct sockaddr_in* localaddr = (struct sockaddr_in*) CFDataGetBytePtr(dlocaladdr);
+        
+        response = [response stringByAppendingFormat:@"Content-base: rtsp://%s/\r\n", inet_ntoa(localaddr->sin_addr)];
+        CFRelease(dlocaladdr);
+        response = [response stringByAppendingFormat:@"Date: %@\r\nContent-Type: application/sdp\r\nContent-Length: %d\r\n\r\n", date, (int)[sdp length] ];
+        response = [response stringByAppendingString:sdp];
+    }
+    else if ([cmd caseInsensitiveCompare:@"setup"] == NSOrderedSame)
+    {
+        NSString* transport = [msg valueForOption:@"transport"];
+        NSArray* props = [transport componentsSeparatedByString:@";"];
+        NSArray* ports = nil;
+        for (NSString* s in props)
         {
-            response = [msg createResponse:200 text:@"OK"];
-            response = [response stringByAppendingString:@"Server: AVEncoderDemo/1.0\r\n"];
-            response = [response stringByAppendingString:@"Public: DESCRIBE, SETUP, TEARDOWN, PLAY, OPTIONS\r\n\r\n"];
+            if ([s length] > 14)
+            {
+                if ([s compare:@"client_port=" options:0 range:NSMakeRange(0, 12)] == NSOrderedSame)
+                {
+                    NSString* val = [s substringFromIndex:12];
+                    ports = [val componentsSeparatedByString:@"-"];
+                    break;
+                }
+            }
         }
-        else if ([cmd caseInsensitiveCompare:@"describe"] == NSOrderedSame)
+        if ([ports count] == 2)
         {
-            NSString* sdp = [self makeSDP];
-            response = [msg createResponse:200 text:@"OK"];
-            NSString* date = [NSDateFormatter localizedStringFromDate:[NSDate date] dateStyle:NSDateFormatterLongStyle timeStyle:NSDateFormatterLongStyle];
-            CFDataRef dlocaladdr = CFSocketCopyAddress(_s);
-            struct sockaddr_in* localaddr = (struct sockaddr_in*) CFDataGetBytePtr(dlocaladdr);
+            int portRTP = (int)[ports[0] integerValue];
+            int portRTCP = (int) [ports[1] integerValue];
             
-            response = [response stringByAppendingFormat:@"Content-base: rtsp://%s/\r\n", inet_ntoa(localaddr->sin_addr)];
-            CFRelease(dlocaladdr);
-            response = [response stringByAppendingFormat:@"Date: %@\r\nContent-Type: application/sdp\r\nContent-Length: %d\r\n\r\n", date, (int)[sdp length] ];
-            response = [response stringByAppendingString:sdp];
-        }
-        else if ([cmd caseInsensitiveCompare:@"setup"] == NSOrderedSame)
-        {
-            NSString* transport = [msg valueForOption:@"transport"];
-            NSArray* props = [transport componentsSeparatedByString:@";"];
-            NSArray* ports = nil;
-            for (NSString* s in props)
+            NSString* session_name = [self createSession:portRTP rtcp:portRTCP];
+            if (session_name != nil)
             {
-                if ([s length] > 14)
-                {
-                    if ([s compare:@"client_port=" options:0 range:NSMakeRange(0, 12)] == NSOrderedSame)
-                    {
-                        NSString* val = [s substringFromIndex:12];
-                        ports = [val componentsSeparatedByString:@"-"];
-                        break;
-                    }
-                }
-            }
-            if ([ports count] == 2)
-            {
-                int portRTP = (int)[ports[0] integerValue];
-                int portRTCP = (int) [ports[1] integerValue];
-                
-                NSString* session_name = [self createSession:portRTP rtcp:portRTCP];
-                if (session_name != nil)
-                {
-                    response = [msg createResponse:200 text:@"OK"];
-                    response = [response stringByAppendingFormat:@"Session: %@\r\nTransport: RTP/AVP;unicast;client_port=%d-%d;server_port=6970-6971\r\n\r\n",
-                                session_name,
-                                portRTP,portRTCP];
-                }
-            }
-            if (response == nil)
-            {
-                // !!
-                response = [msg createResponse:451 text:@"Need better error string here"];
+                response = [msg createResponse:200 text:@"OK"];
+                response = [response stringByAppendingFormat:@"Session: %@\r\nTransport: RTP/AVP;unicast;client_port=%d-%d;server_port=6970-6971\r\n\r\n",
+                            session_name,
+                            portRTP,portRTCP];
             }
         }
-        else if ([cmd caseInsensitiveCompare:@"play"] == NSOrderedSame)
+        if (response == nil)
         {
-            @synchronized(self)
+            // !!
+            response = [msg createResponse:451 text:@"Need better error string here"];
+        }
+    }
+    else if ([cmd caseInsensitiveCompare:@"play"] == NSOrderedSame)
+    {
+        @synchronized(self)
+        {
+            if (_state != Setup)
             {
-                if (_state != Setup)
-                {
-                    response = [msg createResponse:451 text:@"Wrong state"];
-                }
-                else
-                {
-                    _state = Playing;
-                    _bFirst = YES;
-                    response = [msg createResponse:200 text:@"OK"];
-                    response = [response stringByAppendingFormat:@"Session: %@\r\n\r\n", _session];
-                }
+                response = [msg createResponse:451 text:@"Wrong state"];
+            }
+            else
+            {
+                _state = Playing;
+                _bFirst = YES;
+                response = [msg createResponse:200 text:@"OK"];
+                response = [response stringByAppendingFormat:@"Session: %@\r\n\r\n", _session];
             }
         }
-        else if ([cmd caseInsensitiveCompare:@"teardown"] == NSOrderedSame)
+    }
+    else if ([cmd caseInsensitiveCompare:@"teardown"] == NSOrderedSame)
+    {
+        [self tearDown];
+        response = [msg createResponse:200 text:@"OK"];
+    }
+    else
+    {
+        NSLog(@"[RTSP Conn] ERROR: RTSP method %@ not handled", cmd);
+        response = [msg createResponse:451 text:@"Method not recognised"];
+    }
+    
+    if (response != nil)
+    {
+        NSLog(@"[RTSP Conn] Sending response:\n%@", response);
+        NSData* dataResponse = [response dataUsingEncoding:NSUTF8StringEncoding];
+        CFSocketError e = CFSocketSendData(_s, NULL, (__bridge CFDataRef)(dataResponse), 2);
+        if (e)
         {
-            [self tearDown];
-            response = [msg createResponse:200 text:@"OK"];
-        }
-        else
-        {
-            NSLog(@"RTSP method %@ not handled", cmd);
-            response = [msg createResponse:451 text:@"Method not recognised"];
-        }
-        if (response != nil)
-        {
-            NSData* dataResponse = [response dataUsingEncoding:NSUTF8StringEncoding];
-            CFSocketError e = CFSocketSendData(_s, NULL, (__bridge CFDataRef)(dataResponse), 2);
-            if (e)
-            {
-                NSLog(@"send %ld", e);
-            }
+            NSLog(@"[RTSP Conn] ERROR: Send failed with code %ld", (long)e);
         }
     }
 }
@@ -369,8 +382,15 @@ static void onRTCP(CFSocketRef s,
             addrRTP.sin_addr.s_addr = INADDR_ANY;
             addrRTP.sin_port = htons(6970);
             CFDataRef dataAddrRTP = CFDataCreate(nil, (const uint8_t*)&addrRTP, sizeof(addrRTP));
-            CFSocketSetAddress(_sRTP, dataAddrRTP);
+            CFSocketError err = CFSocketSetAddress(_sRTP, dataAddrRTP);
             CFRelease(dataAddrRTP);
+            if (err != kCFSocketSuccess) {
+                NSLog(@"[RTSP Bind] ERROR: Failed to bind _sRTP to local port 6970. Error code: %ld", (long)err);
+            } else {
+                struct sockaddr_in* destAddr = (struct sockaddr_in*) CFDataGetBytePtr(_addrRTP);
+                NSLog(@"[RTSP Bind] Successfully bound _sRTP to local port 6970. Target peer destination: %s:%d",
+                      inet_ntoa(destAddr->sin_addr), ntohs(destAddr->sin_port));
+            }
         }
         
         if (_sRTCP) {
@@ -385,8 +405,15 @@ static void onRTCP(CFSocketRef s,
             addrRTCP.sin_addr.s_addr = INADDR_ANY;
             addrRTCP.sin_port = htons(6971);
             CFDataRef dataAddrRTCP = CFDataCreate(nil, (const uint8_t*)&addrRTCP, sizeof(addrRTCP));
-            CFSocketSetAddress(_sRTCP, dataAddrRTCP);
+            CFSocketError err = CFSocketSetAddress(_sRTCP, dataAddrRTCP);
             CFRelease(dataAddrRTCP);
+            if (err != kCFSocketSuccess) {
+                NSLog(@"[RTSP Bind] ERROR: Failed to bind _sRTCP to local port 6971. Error code: %ld", (long)err);
+            } else {
+                struct sockaddr_in* destAddr = (struct sockaddr_in*) CFDataGetBytePtr(_addrRTCP);
+                NSLog(@"[RTSP Bind] Successfully bound _sRTCP to local port 6971. Target peer destination: %s:%d",
+                      inet_ntoa(destAddr->sin_addr), ntohs(destAddr->sin_port));
+            }
         }
         
         // reader reports received here
@@ -407,8 +434,13 @@ static void onRTCP(CFSocketRef s,
             addr.sin_family = AF_INET;
             addr.sin_port = htons(6971);
             CFDataRef dataAddr = CFDataCreate(nil, (const uint8_t*)&addr, sizeof(addr));
-            CFSocketSetAddress(_recvRTCP, dataAddr);
+            CFSocketError err = CFSocketSetAddress(_recvRTCP, dataAddr);
             CFRelease(dataAddr);
+            if (err != kCFSocketSuccess) {
+                NSLog(@"[RTSP Bind] ERROR: Failed to bind _recvRTCP to local port 6971. Error code: %ld", (long)err);
+            } else {
+                NSLog(@"[RTSP Bind] Successfully bound _recvRTCP to local port 6971.");
+            }
         }
         
         _rlsRTCP = CFSocketCreateRunLoopSource(nil, _recvRTCP, 0);
@@ -555,8 +587,16 @@ static void onRTCP(CFSocketRef s,
         if (_sRTP)
         {
             CFDataRef data = CFDataCreate(nil, packet, cBytes);
-            CFSocketSendData(_sRTP, _addrRTP, data, 0);
+            CFSocketError err = CFSocketSendData(_sRTP, _addrRTP, data, 0);
             CFRelease(data);
+            
+            static int rtpSendCount = 0;
+            rtpSendCount++;
+            if (rtpSendCount % 100 == 0 || err != kCFSocketSuccess) {
+                struct sockaddr_in* destAddr = (struct sockaddr_in*) CFDataGetBytePtr(_addrRTP);
+                NSLog(@"[RTSP UDP Send] RTP packet #%d, size: %d bytes, target: %s:%d, send result: %ld",
+                      rtpSendCount, cBytes, inet_ntoa(destAddr->sin_addr), ntohs(destAddr->sin_port), (long)err);
+            }
         }
         _packets++;
         _bytesSent += cBytes;
@@ -579,8 +619,17 @@ static void onRTCP(CFSocketRef s,
             if (_sRTCP)
             {
                 CFDataRef dataRTCP = CFDataCreate(nil, buf, lenRTCP);
-                CFSocketSendData(_sRTCP, _addrRTCP, dataRTCP, lenRTCP);
+                CFSocketError err = CFSocketSendData(_sRTCP, _addrRTCP, dataRTCP, lenRTCP);
                 CFRelease(dataRTCP);
+                if (err != kCFSocketSuccess) {
+                    struct sockaddr_in* destAddr = (struct sockaddr_in*) CFDataGetBytePtr(_addrRTCP);
+                    NSLog(@"[RTSP UDP Send] ERROR: Failed to send RTCP SR packet, size: %d bytes, target: %s:%d, result: %ld",
+                          lenRTCP, inet_ntoa(destAddr->sin_addr), ntohs(destAddr->sin_port), (long)err);
+                } else {
+                    struct sockaddr_in* destAddr = (struct sockaddr_in*) CFDataGetBytePtr(_addrRTCP);
+                    NSLog(@"[RTSP UDP Send] Sent RTCP Sender Report, size: %d bytes, target: %s:%d, result: %ld",
+                          lenRTCP, inet_ntoa(destAddr->sin_addr), ntohs(destAddr->sin_port), (long)err);
+                }
             }
             
             _sentRTCP = now;
